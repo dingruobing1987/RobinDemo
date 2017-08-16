@@ -1,0 +1,27 @@
+public class ZstdUtil
+{
+    // CHECKSTYLE:OFF
+    
+    /**
+     * 压缩
+     * @param bytes
+     * @return
+     * @throws RuntimeException
+     */
+    public static byte[] compress( byte[] bytes ) throws RuntimeException
+    {
+        return Zstd.compress( bytes );
+    }
+
+    /**
+     * 解压缩
+     * @param bytes
+     * @return
+     * @throws RuntimeException
+     */
+    public static byte[] decompress( byte[] bytes ) throws RuntimeException
+    {
+        return Zstd.decompress( bytes, (int)Zstd.decompressedSize( bytes ) );
+    }
+    // CHECKSTYLE:ON
+}
