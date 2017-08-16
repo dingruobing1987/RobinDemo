@@ -1,6 +1,6 @@
 
 
-package com.huawei.it.sctes.server.redis.client;
+
 
 import java.util.List;
 import java.util.Map;
@@ -10,7 +10,7 @@ import org.apache.poi.ss.formula.functions.T;
 
 import redis.clients.jedis.BinaryClient.LIST_POSITION;
 
-import com.huawei.it.sctes.server.redis.RedisInfoVO;
+
 
 /**
  * <redis客户端接口>
