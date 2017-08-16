@@ -1,5 +1,5 @@
 
-package com.huawei.it.sctes.server.redis.serialize;
+
 
 import java.io.IOException;
 import java.io.InputStream;
