@@ -1,0 +1,499 @@
+/*******************************************************************************
+ * Copyright (c) Huawei Technologies Co., Ltd. 2010-2017. All rights reserved.
+ * Author:sWX216762 2017年1月19日
+ *******************************************************************************/
+
+package com.huawei.it.sctes.server.redis;
+
+import java.util.Map;
+
+/**
+ * <集群信息 VO>
+ * Server部分记录了Redis服务器的信息，它包含以下域：
+ * redis_version : 2.8.19 # Redis服务器版本
+ * redis_git_sha1：00000000 #Git SHA1
+ * redis_git_dirty: 0 #Git dirty flag
+ * os: Linux 3.2.0-23-generic x86_64 #Redis服务器的宿主操作系统
+ * arch_bits: 64 #服务器系统架构（32位或64位）
+ * multiplexing_api: epoll #Redis使用的事件处理机制
+ * gcc_version:4.6.3 #编译Redis时所使用的GCC版本
+ * process_id:7573 #Redis服务的进程PID
+ * run_id:f1c233c4194cba88616c5bfff2d97fc3074865c1 #Redis服务器的随机标识符（用于Sentinel和集群）
+ * tcp_port:6379 #Redis服务监听的TCP端口
+ * uptime_in_seconds:7976 #自Redis服务器启动以来，经过的秒数
+ * uptime_in_days:0 #自Redis服务器启动以来，经过的天数. 这里还不到1天，故显示为0
+ * hz:10 # Redis调用内部函数来执行许多后台任务的频率为每秒10次
+ * lru_clock:1133773 #以分钟为单位进行自增的时钟，用于LRU管理
+ * config_file:/data/redis_6379/redis.conf #redis.conf配置文件所在路径
+ * Clients部分记录了已连接客户端的信息，它包含以下域：
+ * connected_clients:2 #已连接客户端的数量（不包括通过从服务器连接的客户端）
+ * client_longest_output_list:0 #当前的客户端连接中，最长的输出列表
+ * client_biggest_input_buf:0 #当前连接的客户端中，最大的输入缓存
+ * blocked_clients:0 #正在等待阻塞命令（BLOP、BRPOP、BRPOPLPUSH）的客户端的数量
+ * Memory部分记录了服务器的内存信息，它包含以下域：
+ * used_memory:894216
+ * #Redis分配器分配给Redis的内存。例如，当Redis增加了存储数据时，需要的内存直接从分配器分配给它的内存里面取就可以了，也就是直接从used_memory取。而Redis分配器分配给Redis的内存
+ * ，是从操作系统分配给Redis的内存里面取的（单位是字节）
+ * used_memory_human:873.26K #以人类可读格式显示Redis消耗的内存
+ * used_memory_rss:2691072 #操作系统分配给Redis的内存。也就是Redis占用的内存大小。这个值和top指令输出的RES列结果是一样的。RES列结果就表示Redis进程真正使用的物理内存（单位是字节）
+ * used_memory_peak:914160 #Redis的内存消耗峰值（单位是字节）
+ * used_memory_peak_human:892.73K #以人类可读的格式返回Redis的内存消耗峰值
+ * used_memory_lua:35840 #Lua引擎所使用的内存大小（单位是字节）
+ * mem_fragmentation_ratio:3.01 # used_memory_rss和used_memory之间的比率
+ * mem_allocator:jemalloc-3.6.0 #在编译时指定的，Redis所使用的内存分配器。可以是libc、jemalloc或者tcmalloc
+ * 理想情况下，used_memory_rss的值应该只比used_memory稍微高一点。
+ * 当rss >used，且两者的值相差较大时，表示存在（内部或者外部的）内存碎片。内存碎片的比率可以通过mem_fragmentation_ratio的值看出；
+ * 当used>rss时，表示Redis的部分内存被操作系统换出到交换空间，在这种情况下，操作可能会产生明显的延迟。
+ * Persistence部分记录了RDB持久化和AOF持久化有关的信息，它包含以下域：
+ * loading:0 #一个标志值，记录了服务器是否正在载入持久化文件
+ * rdb_changes_since_last_save:0 #距离最后一次成功创建持久化文件之后，改变了多少个键值
+ * rdb_bgsave_in_progress:0 #一个标志值，记录服务器是否正在创建RDB文件
+ * rdb_last_save_time:1427189587 #最近一次成功创建RDB文件的UNIX时间戳
+ * rdb_last_bgsave_status:ok #一个标志值，记录了最后一次创建RDB文件的结果是成功还是失败
+ * rdb_last_bgsave_time_sec:0 #记录最后一次创建RDB文件耗费的秒数
+ * rdb_current_bgsave_time_sec:-1 #如果服务器正在创建RDB文件，那么这个值记录的就是当前的创建RDB操作已经耗费了多长时间（单位为秒）
+ * aof_enabled:0 #一个标志值，记录了AOF是否处于打开状态
+ * aof_rewrite_in_progress:0 #一个标志值，记录了服务器是否正在创建AOF文件
+ * aof_rewrite_scheduled:0 #一个标志值，记录了RDB文件创建完之后，是否需要执行预约的AOF重写操作
+ * aof_last_rewrite_time_sec:-1 #记录了最后一次AOF重写操作的耗时
+ * aof_current_rewrite_time_sec:-1 #如果服务器正在进行AOF重写操作，那么这个值记录的就是当前重写操作已经耗费的时间（单位是秒）
+ * aof_last_bgrewrite_status:ok #一个标志值，记录了最后一次重写AOF文件的结果是成功还是失败
+ * 如果AOF持久化功能处于开启状态，那么在Persistence部分还会加上以下域：
+ * aof_current_size:14301 #AOF文件目前的大小
+ * aof_base_size:14301 #服务器启动时或者最近一次执行AOF重写之后，AOF文件的大小
+ * aof_pending_rewrite:0 #一个标志值，记录了是否有AOF重写操作在等待RDB文件创建完之后执行
+ * aof_buffer_length:0 # AOF缓冲区的大小
+ * aof_rewrite_buffer_length:0 #AOF重写缓冲区的大小
+ * aof_pending_bio_fsync:0 #在后台I/0队列里面，等待执行的fsync数量
+ * aof_delayed_fsync:0 #被延迟执行的fsync数量
+ * Stats部分记录了一般的统计信息，它包含以下域：
+ * total_connections_received:8 #服务器已经接受的连接请求数量
+ * total_commands_processed:10673 #服务器已经执行的命令数量
+ * instantaneous_ops_per_sec:0 #服务器每秒中执行的命令数量
+ * rejected_connections:0 #因为最大客户端数量限制而被拒绝的连接请求数量
+ * expired_keys:0 #因为过期而被自动删除的数据库键数量
+ * evicted_keys:0 #因为最大内存容量限制而被驱逐（evict）的键数量
+ * keyspace_hits:1 #查找数据库键成功的次数
+ * keyspace_misses:0 #查找数据库键失败的次数
+ * pubsub_channels:0 #目前被订阅的频道数量
+ * pubsub_patterns:0 #目前被订阅的模式数量
+ * latest_fork_usec:159 #最近一次fork()操作耗费的时间(毫秒)
+ * Replication部分记录了主从复制的信息
+ * role:master #在主从复制中，充当的角色。如果没有主从复制，单点的，它充当的角色也是master
+ * connected_slaves:1 #有一个slave连接上来
+ * slave0:ip=14.17.119.220,port=6379,state=online,offset=718446,lag=0 #slave的IP、端口、状态等
+ * 如果当前服务器是从服务器的话，那么这个部分还会加上以下域：
+ * master_host :主服务器的IP地址
+ * master_port:主服务器监听的端口号
+ * master_link_status:复制连接当前的状态，up表示连接正常，down表示连接断开
+ * master_last_io_seconds_ago:距离最近一次与主服务器进行通信已经过去了多少秒
+ * master_sync_in_progress:一个标志值，记录了主服务器是否正在与这个从服务器进行同步
+ * 如果同步操作正在进行，那么这个部分还会加上以下域：
+ * master_sync_left_bytes：距离同步完成还缺多少字节的数据
+ * master_sync_last_io_seconds_ago: 距离最近一次与主服务器进行通信已经过去了多少秒
+ * 如果主从服务器之间的连接处于断线状态，那么这个部分还会加上以下域：
+ * master_link_down_since_seconds: 主从服务器连接断开了多少秒
+ * cpu部分记录了CPU的计算量统计信息，它包含以下域：
+ * used_cpu_sys:75.46 #Redis服务器耗费的系统CPU
+ * used_cpu_user:90.12 #Redis服务器耗费的用户CPU
+ * used_cpu_sys_children:0.00 #Redis后台进程耗费的系统CPU
+ * used_cpu_user_children:0.00 #Redis后台进程耗费的用户CPU
+ * Keyspace部分记录了数据库相关的统计信息，如数据库的键数量、数据库已经被删除的过期键数量。对于每个数据库，这个部分会添加一行以下格式的信息：
+ * db0:keys=25,expires=0,avg_ttl=0 #0号数据库有25个键、已经被删除的过期键数量为0个
+ * 
+ * @author sWX216762
+ * @see <相关的类或者类的某个方法>
+ */
+public class RedisInfoVO
+{
+    /**
+     * 服务器的IP和端口
+     */
+    private String key;
+
+    /**
+     * 版本
+     */
+    private String redis_version;
+
+    /**
+     * 进程ID
+     */
+    private String process_id;
+
+    /**
+     * 运行时间（秒）
+     */
+    private String uptime_in_seconds;
+
+    /**
+     * Redis 分配的内存总量（以字节为单位）
+     */
+    private String used_memory;
+
+    /**
+     * Redis 分配的内存总量（以M为单位）
+     */
+    private String used_memory_human;
+
+    /**
+     * Redis 分配的内存总量(包括内存碎片)
+     * 从操作系统的角度，返回 Redis 已分配的内存总量（俗称常驻集大小）。这个值和 top 、 ps 等命令的输出一致
+     */
+    private String used_memory_rss;
+
+    /**
+     * Redis所用内存的高峰值（以字节为单位）
+     */
+    private String used_memory_peak;
+
+    /**
+     * Redis所用内存的高峰值（以M为单位）
+     */
+    private String used_memory_peak_human;
+
+    /**
+     * 引擎所使用的内存大小（以字节为单位）
+     */
+    private String used_memory_lua;
+
+    /**
+     * 内存碎片比率 (used_memory_rss 和 used_memory 之间的比率)
+     */
+    private String mem_fragmentation_ratio;
+
+    /**
+     * 运行以来连接过的客户端的总数量
+     */
+    private String total_connections_received;
+
+    /**
+     * 运行以来执行过的命令的总数量
+     */
+    private String total_commands_processed;
+
+    /**
+     * 运行以来过期的 key 的数量
+     */
+    private String expired_keys;
+
+    /**
+     * 运行以来删除过的key的数量
+     */
+    private String evicted_keys;
+
+    /**
+     * 命中 key 的次数
+     */
+    private String keyspace_hits;
+
+    /**
+     * 不命中 key 的次数
+     */
+    private String keyspace_misses;
+
+    /**
+     * 当前使用中的频道数量
+     */
+    private String pubsub_channels;
+
+    /**
+     * 当前使用的模式的数量
+     */
+    private String pubsub_patterns;
+
+    /**
+     * 当前实例的角色master还是slave
+     */
+    private String role;
+
+    /**
+     * keys=22,expires=0,avg_ttl=0 各个数据库的 key 的数量，以及带有生存期的 key 的数量，平均失效时间
+     */
+    private String db0;
+
+    // CPU
+    /**
+     * Redis服务器耗费的系统CPU
+     */
+    private String used_cpu_sys;
+    
+    /**
+     * Redis服务器耗费的用户CPU
+     */
+    private String used_cpu_user;
+    
+    /**
+     * Redis后台进程耗费的系统CPU
+     */
+    private String used_cpu_sys_children;
+    
+    /**
+     * Redis后台进程耗费的用户CPU
+     */
+    private String used_cpu_user_children;
+    /**
+     * 全量info内容
+     */
+    private Map<String, String> info;
+
+    public String getKey()
+    {
+        return key;
+    }
+
+    public void setKey( String key )
+    {
+        this.key = key;
+    }
+
+    public String getRedis_version()
+    {
+        return redis_version;
+    }
+
+    public void setRedis_version( String redis_version )
+    {
+        this.redis_version = redis_version;
+    }
+
+    public String getProcess_id()
+    {
+        return process_id;
+    }
+
+    public void setProcess_id( String process_id )
+    {
+        this.process_id = process_id;
+    }
+
+    public String getUptime_in_seconds()
+    {
+        return uptime_in_seconds;
+    }
+
+    public void setUptime_in_seconds( String uptime_in_seconds )
+    {
+        this.uptime_in_seconds = uptime_in_seconds;
+    }
+
+    public String getUsed_memory()
+    {
+        return used_memory;
+    }
+
+    public void setUsed_memory( String used_memory )
+    {
+        this.used_memory = used_memory;
+    }
+
+    public String getUsed_memory_human()
+    {
+        return used_memory_human;
+    }
+
+    public void setUsed_memory_human( String used_memory_human )
+    {
+        this.used_memory_human = used_memory_human;
+    }
+
+    public String getUsed_memory_rss()
+    {
+        return used_memory_rss;
+    }
+
+    public void setUsed_memory_rss( String used_memory_rss )
+    {
+        this.used_memory_rss = used_memory_rss;
+    }
+
+    public String getUsed_memory_peak()
+    {
+        return used_memory_peak;
+    }
+
+    public void setUsed_memory_peak( String used_memory_peak )
+    {
+        this.used_memory_peak = used_memory_peak;
+    }
+
+    public String getUsed_memory_peak_human()
+    {
+        return used_memory_peak_human;
+    }
+
+    public void setUsed_memory_peak_human( String used_memory_peak_human )
+    {
+        this.used_memory_peak_human = used_memory_peak_human;
+    }
+
+    public String getUsed_memory_lua()
+    {
+        return used_memory_lua;
+    }
+
+    public void setUsed_memory_lua( String used_memory_lua )
+    {
+        this.used_memory_lua = used_memory_lua;
+    }
+
+    public String getMem_fragmentation_ratio()
+    {
+        return mem_fragmentation_ratio;
+    }
+
+    public void setMem_fragmentation_ratio( String mem_fragmentation_ratio )
+    {
+        this.mem_fragmentation_ratio = mem_fragmentation_ratio;
+    }
+
+    public String getTotal_connections_received()
+    {
+        return total_connections_received;
+    }
+
+    public void setTotal_connections_received( String total_connections_received )
+    {
+        this.total_connections_received = total_connections_received;
+    }
+
+    public String getTotal_commands_processed()
+    {
+        return total_commands_processed;
+    }
+
+    public void setTotal_commands_processed( String total_commands_processed )
+    {
+        this.total_commands_processed = total_commands_processed;
+    }
+
+    public String getExpired_keys()
+    {
+        return expired_keys;
+    }
+
+    public void setExpired_keys( String expired_keys )
+    {
+        this.expired_keys = expired_keys;
+    }
+
+    public String getEvicted_keys()
+    {
+        return evicted_keys;
+    }
+
+    public void setEvicted_keys( String evicted_keys )
+    {
+        this.evicted_keys = evicted_keys;
+    }
+
+    public String getKeyspace_hits()
+    {
+        return keyspace_hits;
+    }
+
+    public void setKeyspace_hits( String keyspace_hits )
+    {
+        this.keyspace_hits = keyspace_hits;
+    }
+
+    public String getKeyspace_misses()
+    {
+        return keyspace_misses;
+    }
+
+    public void setKeyspace_misses( String keyspace_misses )
+    {
+        this.keyspace_misses = keyspace_misses;
+    }
+
+    public String getPubsub_channels()
+    {
+        return pubsub_channels;
+    }
+
+    public void setPubsub_channels( String pubsub_channels )
+    {
+        this.pubsub_channels = pubsub_channels;
+    }
+
+    public String getPubsub_patterns()
+    {
+        return pubsub_patterns;
+    }
+
+    public void setPubsub_patterns( String pubsub_patterns )
+    {
+        this.pubsub_patterns = pubsub_patterns;
+    }
+
+    public String getRole()
+    {
+        return role;
+    }
+
+    public void setRole( String role )
+    {
+        this.role = role;
+    }
+
+    public String getDb0()
+    {
+        return db0;
+    }
+
+    public void setDb0( String db0 )
+    {
+        this.db0 = db0;
+    }
+
+    public String getUsed_cpu_sys()
+    {
+        return used_cpu_sys;
+    }
+
+    public void setUsed_cpu_sys( String used_cpu_sys )
+    {
+        this.used_cpu_sys = used_cpu_sys;
+    }
+
+    public String getUsed_cpu_user()
+    {
+        return used_cpu_user;
+    }
+
+    public void setUsed_cpu_user( String used_cpu_user )
+    {
+        this.used_cpu_user = used_cpu_user;
+    }
+
+    public String getUsed_cpu_sys_children()
+    {
+        return used_cpu_sys_children;
+    }
+
+    public void setUsed_cpu_sys_children( String used_cpu_sys_children )
+    {
+        this.used_cpu_sys_children = used_cpu_sys_children;
+    }
+
+    public String getUsed_cpu_user_children()
+    {
+        return used_cpu_user_children;
+    }
+
+    public void setUsed_cpu_user_children( String used_cpu_user_children )
+    {
+        this.used_cpu_user_children = used_cpu_user_children;
+    }
+
+    public Map<String, String> getInfo()
+    {
+        return info;
+    }
+
+    public void setInfo( Map<String, String> info )
+    {
+        this.info = info;
+    }
+}
