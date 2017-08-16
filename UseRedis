@@ -1,0 +1,30 @@
+@Target( {ElementType.TYPE,ElementType.METHOD} )// 目标是方法
+@Retention( RetentionPolicy.RUNTIME )// 注解会在class中存在，运行时可通过反射获取
+@Documented
+public @interface UseRedis
+{
+    /**
+     * Redis缓存的Key,用于自定义key，如果想加入自己的特有标识可以使用该属性
+     * @return
+     */
+    String key() default ""; 
+    
+    /**
+     * key的后缀模式，默认所有参数都会拼接到key中
+     * @return
+     */
+    KeyMode keyMode() default KeyMode.ALL;  
+    
+    /**
+     * 失效时间,缓存多少秒,默认30分钟
+     * @return
+     */
+    int expire() default 60*30;
+
+
+    /**
+     * Redis的数据类型，默认Object类型
+     * @return
+     */
+    DataType dataType() default DataType.OBJECT;
+}
