@@ -1,6 +1,5 @@
 
 
-package com.huawei.it.sctes.server.redis;
 
 import java.util.Map;
 
