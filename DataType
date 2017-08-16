@@ -1,0 +1,32 @@
+public enum DataType
+{
+    /**
+     * String 类型
+     */
+    STRING, 
+    
+    /**
+     * Map &ltString,String>类型
+     */
+    HASH, 
+    
+    /**
+     * Set &ltString>类型
+     */
+    SET, 
+    
+    /**
+     * Map &ltString,Object> ,Map值存储Object类型
+     */
+    HASHOBJECT, 
+    
+    /**
+     * List &ltString> 类型
+     */
+    LIST,
+    
+    /**
+     * Object 类型
+     */
+    OBJECT
+}
