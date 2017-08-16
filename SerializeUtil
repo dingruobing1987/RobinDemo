@@ -1,0 +1,118 @@
+public class SerializeUtil
+{
+    private static Logger logger = Logger.getLogger( SerializeUtil.class );
+
+    private static final KryoSerialization kryoSerialization = new KryoSerialization( new KyroFactory() );
+
+    /**
+     * 序列化对象，支持Zstd压缩
+     * 
+     * @param value
+     *            对象
+     * @param compress
+     *            true:使用压缩算法压缩对象，false：不使用压缩算法
+     * @return
+     */
+    public static byte[] serialize( Object value, boolean compress )
+    {
+        ByteArrayOutputStream byteArrayOutputStream = null;
+
+        try
+        {
+            byteArrayOutputStream = new ByteArrayOutputStream();
+
+            if ( value != null )
+            {
+                kryoSerialization.serialize( byteArrayOutputStream, value );
+            }
+
+            if ( compress )
+            {
+                return ZstdUtil.compress( byteArrayOutputStream.toByteArray() );
+            } else
+            {
+                return byteArrayOutputStream.toByteArray();
+            }
+        } catch ( Exception e )
+        {
+            logger.error( e.getMessage(), e );
+            return null;
+        } finally
+        {
+            if ( byteArrayOutputStream != null )
+            {
+                try
+                {
+                    byteArrayOutputStream.close();
+                } catch ( IOException e )
+                {
+                    logger.error( e.getMessage(), e );
+                }
+            }
+        }
+    }
+
+    /**
+     * 序列化对象
+     * <Kryo序列化对象>
+     * 
+     * @param value
+     *            对象
+     * @return
+     */
+    public static byte[] serialize( Object value )
+    {
+        return serialize( value, false );
+    }
+
+    /**
+     * 反序列化，支持Zstd解压缩
+     * @param bytes
+     * @param decompress true：需要Zstd解压缩，false：不需要解压缩
+     * @return 
+     * @throws KryoException
+     */
+    public static Object deserialize( byte[] bytes, boolean decompress ) throws KryoException
+    {
+        // 不为空直接序列化为对象
+        ByteArrayInputStream byteArrayInputStream = null;
+        Object value = null;
+        byte[] buff = bytes;
+        try
+        {
+            if ( decompress )
+            {
+                buff = ZstdUtil.decompress( bytes );
+            } 
+            
+            byteArrayInputStream = new ByteArrayInputStream( buff );
+            value = kryoSerialization.deserialize( byteArrayInputStream );
+        } catch ( KryoException ke )
+        {
+            throw ke;
+        } catch ( IOException e )
+        {
+            logger.error( e.getMessage(), e );
+        } finally
+        {
+            // 结束关闭数据流
+            if ( byteArrayInputStream != null )
+            {
+                try
+                {
+                    byteArrayInputStream.close();
+                } catch ( IOException e )
+                {
+                    logger.error( e.getMessage(), e );
+                }
+            }
+        }
+
+        return value;
+    }
+
+    public static Object deserialize( byte[] bytes )throws KryoException
+    {
+        return deserialize( bytes, false );
+    }
+}
