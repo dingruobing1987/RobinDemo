@@ -1,0 +1,44 @@
+public class ReflectUtil
+{
+    protected static final Logger logger = Logger.getLogger( ReflectUtil.class );
+
+    @SuppressWarnings( "rawtypes" )
+    public static final Object setValue( Object o, String fieldName,
+            Class[] argTypes, Object[] args )
+    {
+        Object v = null;
+        try
+        {
+            boolean isExists = false;
+            Field[] fields = o.getClass().getDeclaredFields();
+
+            // CHECKSTYLE:OFF
+            for ( Field field : fields )
+            // CHECKSTYLE:ON
+            {
+                if ( field.getName().equals( fieldName ) )
+                {
+                    isExists = true;
+                    break;
+                }
+            }
+            if ( isExists )
+            {
+                v = o.getClass()
+                        .getDeclaredMethod( setMethod( fieldName ), argTypes )
+                        .invoke( o, args );
+            }
+        } catch ( Exception e )
+        {
+            logger.error( "setValue error: ", e );
+        }
+
+        return v;
+    }
+
+    private static String setMethod( String fieldName )
+    {
+        return "set" + fieldName.substring( 0, 1 ).toUpperCase()
+                + fieldName.substring( 1 );
+    }
+}
