@@ -1,13 +1,5 @@
 
 
-package com.huawei.it.sctes.server.redis.constants;
-
-/**
- * <redis key类型>
- * 
- * @author sWX216762
- * @see <相关的类或者类的某个方法>
- */
 public interface RedisKeyType
 {
     /**
