@@ -1,0 +1,153 @@
+public class JedisClusterFactroy implements FactoryBean<JedisCluster>,
+        InitializingBean
+{
+
+    private Resource addressConfig;
+
+    private String addressKeyPrefix;
+
+    private JedisCluster jedisCluster;
+
+    private Integer timeout; // 连接超时：connectionTimeout
+
+    private Integer soTimeout; // 读取数据超时：soTimeout
+
+    private Integer maxRedirections;
+
+    private String password;
+
+    private JedisPoolConfig genericObjectPoolConfig;
+
+    private Pattern p = Pattern.compile( "^.+[:]\\d{1,5}\\s*$" );
+
+    @Override
+    public JedisCluster getObject() throws Exception
+    {
+        return jedisCluster;
+    }
+
+    @Override
+    public Class<? extends JedisCluster> getObjectType()
+    {
+        return (this.jedisCluster != null ? this.jedisCluster.getClass()
+                : JedisCluster.class);
+    }
+
+    @Override
+    public boolean isSingleton()
+    {
+        return true;
+    }
+
+    private Set<HostAndPort> parseHostAndPort() throws Exception
+    {
+        InputStream in = null;
+        try
+        {
+            Properties prop = new Properties();
+            in = this.addressConfig.getInputStream();
+            prop.load( in );
+
+            String val = null;
+            boolean isIpPort = false;
+            String[] ipAndPort = null;
+            HostAndPort hap = null;
+            Set<HostAndPort> haps = new HashSet<HostAndPort>( 1 );
+            // CHECKSTYLE:OFF
+            for ( Object key : prop.keySet() )
+            // CHECKSTYLE:ON
+            {
+
+                if ( !((String)key).startsWith( addressKeyPrefix ) )
+                {
+                    continue;
+                }
+
+                val = prop.getProperty( key + "" );
+
+                isIpPort = p.matcher( val ).matches();
+
+                if ( !isIpPort )
+                {
+                    throw new IllegalArgumentException(
+                            "ip or port is illegal !" );
+                }
+                ipAndPort = val.split( ":" );
+
+                hap = new HostAndPort( ipAndPort[0],
+                        Integer.parseInt( ipAndPort[1] ) );
+                haps.add( hap );
+            }
+
+            return haps;
+        } catch ( IllegalArgumentException ex )
+        {
+            throw ex;
+        } catch ( Exception ex )
+        {
+            throw new Exception( "load jedis config error: ", ex );
+        } finally
+        {
+            if ( null != in )
+            {
+                in.close();
+            }
+        }
+    }
+
+    @Override
+    public void afterPropertiesSet() throws Exception
+    {
+        Set<HostAndPort> haps = this.parseHostAndPort();
+
+        if ( StringUtil.isNullOrEmpty( password ) ) // 测试使用，正式生产环境使用带密码连接
+        {
+            jedisCluster = new JedisCluster( haps, timeout, maxRedirections,
+                    genericObjectPoolConfig ); // 不需要密码验证
+        } else
+        {
+            // 需要密码验证，密码再配置redis.properties文件中存储，
+            // 存放加密的密码，这里使用时再解密。
+            jedisCluster = new JedisCluster( haps, timeout, soTimeout,
+                    maxRedirections, password, genericObjectPoolConfig );
+        }
+
+    }
+
+    public void setAddressConfig( Resource addressConfig )
+    {
+        this.addressConfig = addressConfig;
+    }
+
+    public void setTimeout( int timeout )
+    {
+        this.timeout = timeout;
+    }
+
+    public void setSoTimeout( Integer soTimeout )
+    {
+        this.soTimeout = soTimeout;
+    }
+
+    public void setMaxRedirections( int maxRedirections )
+    {
+        this.maxRedirections = maxRedirections;
+    }
+
+    public void setPassword( String password )
+    {
+        this.password = password;
+    }
+
+    public void setAddressKeyPrefix( String addressKeyPrefix )
+    {
+        this.addressKeyPrefix = addressKeyPrefix;
+    }
+
+    public void setGenericObjectPoolConfig(
+            JedisPoolConfig genericObjectPoolConfig )
+    {
+        this.genericObjectPoolConfig = genericObjectPoolConfig;
+    }
+
+}
