@@ -1,0 +1,1456 @@
+public class RedisClusterClient implements IRedisClient
+{
+    private final static ILogger logger = JalorLoggerFactory.getLogger( RedisClusterClient.class );
+    @Inject
+    private JedisCluster jedisCluster;
+
+    @Inject
+    private ICacheDao cacheDao;
+
+    public JedisCluster getJedisCluster()
+    {
+        return jedisCluster;
+    }
+
+    /**
+     * 设置 String
+     * 
+     * @param key
+     * @param value
+     */
+    public String setString( String key, String value )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.set( key, value );
+        } catch ( Exception e )
+        {
+            logger.error( "Set key error : " + e );
+        }
+
+        return result;
+    }
+
+    public List<String> mget( String... listKey )
+    {
+        List<String> listValue = new ArrayList<String>();
+        try
+        {
+            listValue = jedisCluster.mget( listKey );
+        } catch ( Exception e )
+        {
+            logger.error( "Set key error : " + e );
+        }
+
+        return listValue;
+    }
+
+    @SuppressWarnings( "unchecked" )
+    public <T> List<T> mget( Class<T> clas, List<String> listKey )
+    {
+        List<T> listObject = new ArrayList<T>( listKey.size() );
+        try
+        {
+
+            String[] array = new String[listKey.size()];
+            for ( int i = 0; i < listKey.size(); i++ )
+            {
+                array[i] = listKey.get( i );
+            }
+
+            // long size = jedisCluster.exists( array );
+
+            byte[][] keys = new byte[listKey.size()][];
+            for ( int i = 0; i < array.length; i++ )
+            {
+                keys[i] = SafeEncoder.encode( array[i] );
+            }
+
+            List<byte[]> listValue = jedisCluster.mget( keys );
+            for ( byte[] bytes : listValue )
+            {
+                if ( bytes != null )
+                {
+                    T obj = (T)SerializeUtil.deserialize( bytes, RedisConstants.ZSTD_ENABLE );
+                    listObject.add( obj );
+                }
+            }
+
+        } catch ( Exception e )
+        {
+            logger.error( "Set key error : " + e );
+        }
+
+        return null;
+    }
+
+    public String mset( Map<String, Object> mapValues )
+    {
+        String result = null;
+        try
+        {
+            if ( mapValues.size() == 0 )
+            {
+                return "Map is null ";
+            }
+
+            byte[][] keys = new byte[mapValues.size() * 2][];
+            int index = 0;
+            for ( String key : mapValues.keySet() )
+            {
+                keys[index++] = SafeEncoder.encode( key );
+                keys[index++] = SerializeUtil.serialize( mapValues.get( key ), RedisConstants.ZSTD_ENABLE );
+            }
+
+            result = jedisCluster.mset( keys );
+        } catch ( Exception e )
+        {
+            logger.error( "Set key error : " + e );
+        }
+
+        return result;
+    }
+
+    public String mset( String... keysvalues )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.mset( keysvalues );
+        } catch ( Exception e )
+        {
+            logger.error( "Set key error : " + e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 设置 过期时间
+     * 
+     * @param key
+     * @param seconds
+     *            以秒为单位
+     * @param value
+     */
+    public String setString( String key, int seconds, String value )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.setex( key, seconds, value );
+        } catch ( Exception e )
+        {
+            logger.error( "Set keyex error : " + e );
+        }
+
+        return result;
+    }
+
+    public String setStrings( Map<String, String> keysvalues )
+    {
+        String result = null;
+        try
+        {
+            String[] kvs = new String[keysvalues.size() * 2];
+            int index = 0;
+            for ( Entry<String, String> entry : keysvalues.entrySet() )
+            {
+                kvs[index++] = entry.getKey();
+                kvs[index++] = entry.getValue();
+            }
+
+            // 同时设置一个或多个 key-value 对。如果某个给定 key 已经存在，那么 MSET 会用新值覆盖原来的旧值
+            // 集群模式下 mset命令很大几率会失败（(error) CROSSSLOT Keys in request don't hash
+            // to the same slot）
+
+            // 集群支持hash tags功能，即可以把一类key定位到同一个节点，tag的标识目前支持配置，只能使用{}，
+            // redis处理hash tag的逻辑也很简单，redis只计算从第一次出现{，到第一次出现}的substring的hash值，
+            // substring为空，则仍然计算整个key的值，这样对于foo{}{bar}、{foo}{bar}、foo这些冲突的{}，也能取出tag值。
+            // 使用者需遵循redis的hash tag规范
+            result = jedisCluster.mset( kvs );
+
+        } catch ( Exception e )
+        {
+            logger.error( "redis setStrings keysvalues error: ", e );
+        }
+
+        return result;
+    }
+
+    public List<String> getStrings( String... keys )
+    {
+        List<String> result = null;
+        try
+        {
+            // 返回所有(一个或多个)给定 key 的值。如果给定的 key 里面，有某个 key 不存在，那么这个 key 返回特殊值 nil
+            // 。因此，该命令永不失败。
+            result = jedisCluster.mget( keys );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getStrings error: ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取String值
+     * 
+     * @param key
+     * @return value
+     */
+    public String getString( String key )
+    {
+        String result = null;
+        try
+        {
+            if ( jedisCluster == null || !jedisCluster.exists( key ) )
+            {
+                return result;
+            }
+            result = jedisCluster.get( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getString error: ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 创建List集合，并初始化数据
+     * 
+     * @param key
+     * @param list
+     */
+    public long setList( String key, List<String> list )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.lpush( key, list.toArray( new String[list.size()] ) );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setList lpush error : ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 创建List集合，并初始化数据
+     * 
+     * @param key
+     * @param unixTime
+     * @param list
+     */
+    public long setList( String key, int seconds, List<String> list )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.lpush( key, list.toArray( new String[list.size()] ) );
+            expire( key, seconds );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setList lpush error : ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取指定范围的List集合数据
+     * 
+     * @param key
+     * @param start
+     * @param end
+     * @return
+     */
+    public List<String> getList( String key, long start, long end )
+    {
+        List<String> resulut = null;
+        try
+        {
+            resulut = jedisCluster.lrange( key, start, end );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getList error: ", e );
+        }
+
+        return resulut;
+    }
+
+    public List<String> getList( String key )
+    {
+        List<String> resulut = null;
+        try
+        {
+            long end = jedisCluster.llen( key );
+            resulut = getList( key, 0, end );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getList error: ", e );
+        }
+
+        return resulut;
+    }
+
+    public List<String> getList( String key, long start )
+    {
+        List<String> resulut = null;
+        try
+        {
+            long end = jedisCluster.llen( key );
+            resulut = getList( key, start, end );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getList error: ", e );
+        }
+
+        return resulut;
+    }
+
+    /**
+     * 根据参数 count 的值，移除列表中与参数 value 相等的元素。<br>
+     * <br>
+     * count 的值可以是以下几种：<br>
+     * count > 0 : 从表头开始向表尾搜索，移除与 value 相等的元素，数量为 count 。<br>
+     * count < 0 : 从表尾开始向表头搜索，移除与 value 相等的元素，数量为 count 的绝对值。<br>
+     * count = 0 : 移除表中所有与 value 相等的值。<br>
+     * 
+     * @param key
+     * @param count
+     * @param value
+     * @return 被移除元素的数量。
+     */
+    public long removeList( String key, int count, String value )
+    {
+        long result = 0;
+        try
+        {
+            result = jedisCluster.lrem( key, count, value );
+        } catch ( Exception e )
+        {
+            logger.error( "redis delList", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 移除并返回列表 key 的头元素。
+     * 
+     * @param key
+     * @return 列表的头元素。 当 key 不存在时，返回 nil 。
+     */
+    public String lpop( String key )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.lpop( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis lpop error: ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * BLPOP 是列表的阻塞式(blocking)弹出原语。<br>
+     * <br>
+     * 它是 LPOP 命令的阻塞版本，当给定列表内没有任何元素可供弹出的时候，连接将被 BLPOP 命令阻塞，直到等待超时或发现可弹出元素为止。<br>
+     * 当给定多个 key 参数时，按参数 key 的先后顺序依次检查各个列表，弹出第一个非空列表的头元素。<br>
+     * 如果所有给定 key 都不存在或包含空列表，那么 BLPOP 命令将阻塞连接，直到等待超时，或有另一个客户端对给定 key 的任意一个执行
+     * LPUSH 或 RPUSH 命令为止。<br>
+     * 超时参数 timeout 接受一个以秒为单位的数字作为值。超时参数设为 0 表示阻塞时间可以无限期延长(block indefinitely)
+     * 。<br>
+     * 
+     * @param timeout
+     * @param keys
+     * @return 假如在指定时间内没有任何元素被弹出，则返回 [] 空数组。 否则，返回一个含有两个元素的列表，第一个元素是被弹出元素所属的 key
+     *         ，第二个元素是被弹出元素的值。
+     */
+    public List<String> blpop( int timeout, String... keys )
+    {
+        List<String> result = null;
+        try
+        {
+            result = jedisCluster.blpop( timeout, keys );
+        } catch ( Exception e )
+        {
+            logger.error( "redis blpop error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 移除并返回列表 key 的尾元素。
+     * 
+     * @param key
+     * @return 列表的尾元素。 当 key 不存在时，返回 nil 。
+     */
+    public String rpop( String key )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.rpop( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis rpop error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * BRPOP 是列表的阻塞式(blocking)弹出原语。<br>
+     * <br>
+     * 它是 RPOP 命令的阻塞版本，当给定列表内没有任何元素可供弹出的时候，连接将被 BRPOP 命令阻塞，直到等待超时或发现可弹出元素为止。<br>
+     * 当给定多个 key 参数时，按参数 key 的先后顺序依次检查各个列表，弹出第一个非空列表的尾部元素。<br>
+     * 关于阻塞操作的更多信息，请查看 BLPOP 命令， BRPOP 除了弹出元素的位置和 BLPOP 不同之外，其他表现一致。<br>
+     * 
+     * @param timeout
+     * @param keys
+     * @return 假如在指定时间内没有任何元素被弹出，则返回 [] 空数组。 反之，返回一个含有两个元素的列表，第一个元素是被弹出元素所属的 key
+     *         ，第二个元素是被弹出元素的值。
+     */
+    public List<String> brpop( int timeout, String... keys )
+    {
+        List<String> result = null;
+        try
+        {
+            result = jedisCluster.brpop( timeout, keys );
+        } catch ( Exception e )
+        {
+            logger.error( "redis brpop error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 命令 RPOPLPUSH 在一个原子时间内，执行以下两个动作：<br>
+     * <LI>将列表 source 中的最后一个元素(尾元素)弹出，并返回给客户端。<br>
+     * <LI>将 source 弹出的元素插入到列表 destination ，作为 destination 列表的的头元素。<br>
+     * 举个例子，你有两个列表 source 和 destination ， source 列表有元素 a, b, c ， destination
+     * 列表有元素 x, y, z ，执行 RPOPLPUSH source destination 之后， source 列表包含元素 a, b ，
+     * destination 列表包含元素 c, x, y, z ，并且元素 c 会被返回给客户端。<br>
+     * <br>
+     * 如果 source 不存在，值 nil 被返回，并且不执行其他动作。<br>
+     * <br>
+     * 如果 source 和 destination
+     * 相同，则列表中的表尾元素被移动到表头，并返回该元素，可以把这种特殊情况视作列表的旋转(rotation)操作。<br>
+     * <br>
+     * <B>注：涉及到同时操作多个key的批量操作，所以对key值有一定的要求：</B><br>
+     * key中必须使用 hash tags 来指定是数据同一类数据，这样redis才会把这一批数据存放在同一个节点上，<BR>
+     * 设置规则如：userid1{userid}:u1,userid1{userid}:u2,... 用 {userid} 来指定是同一类数据，<BR>
+     * redis只计算从第一次出现{，到第一次出现}的substring的hash值<BR>
+     * 
+     * @param srckey
+     * @param dstkey
+     * @return 被弹出的元素，列表中没有数据时返回 null
+     */
+    public String rpoplpush( String srckey, String dstkey )
+    {
+        String result = null;
+
+        try
+        {
+            result = jedisCluster.rpoplpush( srckey, dstkey );
+        } catch ( Exception e )
+        {
+            logger.error( "redis rpoplpush error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * BRPOPLPUSH 是 RPOPLPUSH 的阻塞版本，当给定列表 source 不为空时， BRPOPLPUSH 的表现和 RPOPLPUSH
+     * 一样。<br>
+     * 当列表 source 为空时， BRPOPLPUSH 命令将阻塞连接，直到等待超时，或有另一个客户端对 source 执行 LPUSH 或
+     * RPUSH 命令为止。<br>
+     * 超时参数 timeout 接受一个以秒为单位的数字作为值。超时参数设为 0 表示阻塞时间可以无限期延长(block indefinitely)
+     * 。<br>
+     * <br>
+     * <B>注：涉及到同时操作多个key的批量操作，所以对key值有一定的要求：</B><br>
+     * key中必须使用 hash tags 来指定是数据同一类数据，这样redis才会把这一批数据存放在同一个节点上，<BR>
+     * 设置规则如：userid1{userid}:u1,userid1{userid}:u2,... 用 {userid} 来指定是同一类数据，<BR>
+     * redis只计算从第一次出现{，到第一次出现}的substring的hash值<BR>
+     * 
+     * @param source
+     * @param destination
+     * @param timeout
+     * @return 假如在指定时间内没有任何元素被弹出，则返 null。 反之，返回被弹出的元素。
+     */
+    public String brpoplpush( String source, String destination, int timeout )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.brpoplpush( source, destination, timeout );
+        } catch ( Exception e )
+        {
+            logger.error( "redis brpoplpush error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 将列表 key 下标为 index 的元素的值设置为 value 。<br>
+     * <br>
+     * 当 index 参数超出范围，或对一个空列表( key 不存在)进行 LSET 时，返回一个错误。<br>
+     * 关于列表下标的更多信息，请参考 LINDEX 命令。<br>
+     * 
+     * @param key
+     * @param index
+     * @param value
+     * @return 操作成功返回 ok ，否则返回错误信息。
+     */
+    public String lset( String key, long index, String value )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.lset( key, index, value );
+        } catch ( Exception e )
+        {
+            logger.error( "redis lset error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 返回列表 key 的长度。<br>
+     * <br>
+     * 如果 key 不存在，则 key 被解释为一个空列表，返回 0 .<br>
+     * 如果 key 不是列表类型，返回一个错误。<br>
+     * 
+     * @param key
+     * @return 列表 key 的长度。
+     */
+    public long llen( String key )
+    {
+        long result = -1;
+        try
+        {
+            result = jedisCluster.llen( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis llen error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 返回列表 key 中，下标为 index 的元素。<br>
+     * <br>
+     * 下标(index)参数 start 和 stop 都以 0 为底，也就是说，以 0 表示列表的第一个元素，以 1
+     * 表示列表的第二个元素，以此类推。<br>
+     * 你也可以使用负数下标，以 -1 表示列表的最后一个元素， -2 表示列表的倒数第二个元素，以此类推。<br>
+     * 如果 key 不是列表类型，返回一个错误。<br>
+     * 
+     * @param key
+     * @param index
+     * @return 列表中下标为 index 的元素。 如果 index 参数的值不在列表的区间范围内(out of range)，返回 nil 。
+     */
+    public String lindex( String key, long index )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.lindex( key, index );
+        } catch ( Exception e )
+        {
+            logger.error( "redis lindex error : ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 将值 value 插入到列表 key 当中，位于值 pivot 之前或之后。<br>
+     * <br>
+     * 当 pivot 不存在于列表 key 时，不执行任何操作。<br>
+     * 当 key 不存在时， key 被视为空列表，不执行任何操作。<br>
+     * 如果 key 不是列表类型，返回一个错误。<br>
+     * 
+     * @param key
+     * @param where
+     *            位置 LIST_POSITION.BEFORE（前）, LIST_POSITION.AFTER（后）;
+     * @param pivot
+     *            列表中的其中一个元素
+     * @param value
+     *            新插入的元素值
+     * @return 如果命令执行成功，返回插入操作完成之后，列表的长度。 如果没有找到 pivot ，返回 -1 。 如果 key
+     *         不存在或为空列表，返回 0 。
+     */
+    public long linsert( String key, LIST_POSITION where, String pivot, String value )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.linsert( key, where, pivot, value );
+        } catch ( Exception e )
+        {
+            logger.error( "redis linsert error: ", e );
+        }
+        return result;
+    }
+
+    public long setHashSet( String key, Set<String> member )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.sadd( key, member.toArray( new String[member.size()] ) );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setHashSet error: ", e );
+        }
+
+        return result;
+    }
+
+    public long setHashSet( String key, int seconds, Set<String> member )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.sadd( key, member.toArray( new String[member.size()] ) );
+            expire( key, seconds );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setHashSet error: ", e );
+        }
+
+        return result;
+
+    }
+
+    public Set<String> getMembers( String key )
+    {
+        Set<String> result = null;
+        try
+        {
+            result = jedisCluster.smembers( key );
+
+        } catch ( Exception e )
+        {
+            logger.error( "redis getMembers error: ", e );
+        }
+
+        return result;
+    }
+
+    public long removeHashSet( String key, String... member )
+    {
+        try
+        {
+            return jedisCluster.srem( key, member );
+        } catch ( Exception e )
+        {
+            logger.error( "redis removeHashSet error: ", e );
+        }
+
+        return 0L;
+    }
+
+    public long setSortHashSet( String key, Map<String, Double> scoreMembers )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.zadd( key, scoreMembers );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setSortHashSet error: ", e );
+        }
+
+        return result;
+    }
+
+    public long setSortHashSet( String key, int seconds, Map<String, Double> scoreMembers )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.zadd( key, scoreMembers );
+            expire( key, seconds );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setSortHashSet error: ", e );
+        }
+
+        return result;
+    }
+
+    public Map<String, Double> getSortHashSet( String key, long start, long end )
+    {
+        Map<String, Double> result = null;
+        try
+        {
+            Set<Tuple> set = jedisCluster.zrangeWithScores( key, start, end );// LinkedHashSet
+
+            if ( CollectionUtils.isEmpty( set ) )
+            {
+                logger.info( "redis getSortHashSet result is null." );
+                return result;
+            }
+
+            result = new LinkedHashMap<String, Double>();
+            for ( Tuple tuple : set )
+            {
+                result.put( tuple.getElement(), tuple.getScore() );
+            }
+
+        } catch ( Exception e )
+        {
+            logger.error( "redis getSortHashSet error: ", e );
+        }
+
+        return result;
+    }
+
+    public long removeSortHashSet( String key, String... member )
+    {
+        try
+        {
+            return jedisCluster.zrem( key, member );
+        } catch ( Exception e )
+        {
+            logger.error( "redis removeSortHashSet error: ", e );
+        }
+
+        return 0L;
+    }
+
+    public long rank( String key, String member )
+    {
+        long result = -1L;
+        try
+        {
+            if ( RedisKeyType.ZSET.equals( type( key ) ) )
+            {
+                result = jedisCluster.zrank( key, member );
+            } else
+            {
+                logger.info( "redis key type is not 'zset'" );
+            }
+        } catch ( Exception e )
+        {
+            logger.error( "redis rank error: ", e );
+        }
+        return result;
+    }
+
+    public String setMap( String key, Map<String, String> map )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.hmset( key, map );
+
+        } catch ( Exception e )
+        {
+            logger.error( "redis setMap error: ", e );
+        }
+
+        return result;
+    }
+
+    public String setMap( String key, int seconds, Map<String, String> map )
+    {
+        String result = null;
+        try
+        {
+            result = jedisCluster.hmset( key, map );
+            expire( key, seconds );
+
+        } catch ( Exception e )
+        {
+            logger.error( "redis setMap error: ", e );
+        }
+
+        return result;
+    }
+
+    public Map<String, String> getMap( String key )
+    {
+        Map<String, String> result = null;
+        try
+        {
+            result = jedisCluster.hgetAll( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getMap error: ", e );
+        }
+
+        return result;
+    }
+
+    public Map<String, String> getMapByFields( String key, String... fields )
+    {
+        Map<String, String> result = null;
+        try
+        {
+            List<String> list = jedisCluster.hmget( key, fields );
+
+            if ( CollectionUtils.isEmpty( list ) )
+            {
+                return result;
+            }
+
+            result = new HashMap<String, String>( fields.length );
+            int i = 0;
+            for ( String field : fields )
+            {
+                result.put( field, list.get( i ) );
+                i++;
+            }
+        } catch ( Exception e )
+        {
+            logger.error( "redis getMapByFields error: ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 删除哈希表 key 中的一个或多个指定域，不存在的域将被忽略
+     * 
+     * @param key
+     * @param field
+     * @return 被成功移除的域的数量，不包括被忽略的域。
+     */
+    public long removeMap( String key, String... field )
+    {
+        long result = 0L;
+        try
+        {
+            result = jedisCluster.hdel( key, field );
+        } catch ( Exception e )
+        {
+            logger.error( "redis removeMap error: ", e );
+        }
+
+        return result;
+    }
+
+    public boolean expire( String key, int seconds )
+    {
+        try
+        {
+            return jedisCluster.expire( key, seconds ) == 1;
+        } catch ( Exception e )
+        {
+            logger.error( "redis expire error: ", e );
+        }
+        return false;
+    }
+
+    public boolean expireAt( String key, long unixTime )
+    {
+        try
+        {
+            return jedisCluster.expireAt( key, unixTime ) == 1;
+        } catch ( Exception e )
+        {
+            logger.error( "redis expireAt error: ", e );
+        }
+        return false;
+    }
+
+    /**
+     * 设置 map
+     * 
+     * @param <T>
+     * @param key
+     * @param value
+     */
+    public <T> String setMapObject( String key, Map<String, T> map )
+    {
+        if ( CollectionUtil.isNullOrEmpty( map ) )
+        {
+            logger.info( "setMapObject : value is null not set redis." );
+            return null;
+        }
+        String result = null;
+        try
+        {
+            Map<byte[], byte[]> fields = new HashMap<byte[], byte[]>( 1 );
+            for ( Entry<String, T> entry : map.entrySet() )
+            {
+                fields.put( SafeEncoder.encode( entry.getKey() ), SerializeUtil.serialize( entry.getValue() ) );
+            }
+            result = jedisCluster.hmset( SafeEncoder.encode( key ), fields );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setMapObject error : ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 获取list
+     * 
+     * @param <T>
+     * @param key
+     * @return list
+     */
+    @SuppressWarnings( "unchecked" )
+    public <T> Map<String, T> getMapObject( String key, Class<T> clas )
+    {
+        Map<String, T> result = null;
+        try
+        {
+            if ( jedisCluster == null || !jedisCluster.exists( SafeEncoder.encode( key ) ) )
+            {
+                return result;
+            }
+
+            T value = null;
+            String key1;
+            Map<byte[], byte[]> bytesMap = jedisCluster.hgetAll( SafeEncoder.encode( key ) );
+
+            if ( null == bytesMap || 0 == bytesMap.size() )
+            {
+                return result;
+            }
+            result = new HashMap<String, T>( bytesMap.size() );
+
+            for ( Map.Entry<byte[], byte[]> by : bytesMap.entrySet() )
+            {
+                key1 = SafeEncoder.encode( by.getKey() );
+                value = (T)SerializeUtil.deserialize( by.getValue() );
+                result.put( key1, value );
+            }
+        } catch ( KryoException ke )
+        {
+            jedisCluster.del( key );
+            logger.error( ke.getMessage() + " KryoException error ,key is:" + key, ke );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getMapObject error: ", e );
+        }
+
+        return result;
+    }
+
+    /**
+     * 存储JSON格式对象， <把对象转换为JSON格式字符串存储>
+     * 
+     * @param key
+     * @param value
+     * @return 返回 字符串 “OK” 表示成功，否则为失败
+     */
+    public String setJsonObject( String key, Object value )
+    {
+        if ( null == value )
+        {
+            logger.info( "setJsonObject : value is null not set redis." );
+            return null;
+        }
+
+        String result = null;
+        byte[] bytes;
+        try
+        {
+            bytes = ZstdUtil.compress( SafeEncoder.encode( JsonUtil.toJSONString( value ) ) );
+            result = jedisCluster.set( SafeEncoder.encode( key ), bytes );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setJsonObject error: ", e );
+        }
+        return result;
+    }
+
+    /**
+     * 获取JSON格式数据，并转换成指定类型的对象
+     * 
+     * @param key
+     * @param clas
+     * @return T
+     */
+    public <T> T getJsonObject( String key, Class<T> clas )
+    {
+        T obj = null;
+        byte[] bytes;
+        try
+        {
+            bytes = ZstdUtil.decompress( jedisCluster.get( SafeEncoder.encode( key ) ).clone() );
+            obj = JsonUtil.parseObject( SafeEncoder.encode( bytes ), clas );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getJsonObject error: ", e );
+        }
+        return obj;
+    }
+
+    public String setObject( String key, Object value )
+    {
+        if ( null == value )
+        {
+            logger.info( "setObject : value is null not set redis." );
+            return null;
+        }
+
+        String result = null;
+        try
+        {
+            result = jedisCluster.set( SafeEncoder.encode( key ),
+                    SerializeUtil.serialize( value, RedisConstants.ZSTD_ENABLE ) );
+        } catch ( Exception e )
+        {
+            logger.error( "redis setObject error: ", e );
+        }
+        return result;
+    }
+
+    @SuppressWarnings( "unchecked" )
+    public <T> T getObject( String key, Class<T> clas )
+    {
+        T result = null;
+        byte[] keySafeEncoder;
+        try
+        {
+            keySafeEncoder = SafeEncoder.encode( key );
+            if ( jedisCluster == null || !jedisCluster.exists( keySafeEncoder ) )
+            {
+                return result;
+            }
+            byte[] in = jedisCluster.get( keySafeEncoder ).clone();
+            result = (T)SerializeUtil.deserialize( in, RedisConstants.ZSTD_ENABLE );
+        } catch ( Exception e )
+        {
+            logger.error( "redis getObject error: ", e );
+        }
+
+        return result;
+
+    }
+
+    public boolean exists( String key )
+    {
+        try
+        {
+            return jedisCluster.exists( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis exists error: ", e );
+        }
+
+        return false;
+    }
+
+    public Long exists( String[] keys )
+    {
+        Long ret = 0L;
+        try
+        {
+            ret = jedisCluster.exists( keys );
+        } catch ( Exception e )
+        {
+            logger.error( "redis exists error: ", e );
+        }
+        return ret;
+    }
+
+    /**
+     * 删除指定key值
+     * 
+     * @param key
+     * @return
+     */
+    public long delKey( String... keys )
+    {
+        long delNum = 0L;
+        try
+        {
+            delNum = jedisCluster.del( keys );
+        } catch ( Exception e )
+        {
+            logger.error( "redis delete keys error: ", e );
+        }
+
+        return delNum;
+    }
+
+    /**
+     * 获取指定key值的失效时间，单位为：秒
+     * 
+     * @param key
+     * @return 当 key 不存在时，返回 -2 。<BR>
+     *         当 key 存在但没有设置剩余生存时间时，返回 -1 。<BR>
+     *         否则，以秒为单位，返回 key 的剩余生存时间。<BR>
+     */
+    public long getKeyTTL( String key )
+    {
+        long ttl = -2;
+        try
+        {
+            ttl = jedisCluster.ttl( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis ttl error: ", e );
+        }
+
+        return ttl;
+    }
+
+    public String type( String key )
+    {
+        String type = "none";
+        try
+        {
+            type = jedisCluster.type( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis type error: ", e );
+        }
+
+        return type;
+
+    }
+
+    public Set<String> keys( String pattern )
+    {
+        return scan( pattern, 100 );
+    }
+
+    public Set<String> keysAll( String pattern )
+    {
+        return scan( pattern, 0 );
+    }
+
+    private Set<String> scan( String pattern, int maxNum )
+    {
+        // 最多查询100个结果
+        // final int maxNum = 100;
+        Set<String> keys = new HashSet<String>( 1 );
+        Map<String, JedisPool> clusterNodes = jedisCluster.getClusterNodes();
+        Jedis jedis = null;
+
+        logger.info( "---redisdebug---:jedis scan start" );
+        try
+        {
+            ScanParams scanParams = new ScanParams();
+            if ( maxNum > 0 )
+            {
+                scanParams.count( maxNum );
+            }
+            scanParams.match( pattern );
+            String cursor;
+            ScanResult<String> scanResult;
+            List<String> results;
+            JedisPool pool;
+
+            // 遍历redis集群各节点
+            for ( String k : clusterNodes.keySet() )
+            {
+                pool = clusterNodes.get( k );
+                logger.info( "---redisdebug---k: " + k + ", WaitTimeMillis: " + pool.getMaxBorrowWaitTimeMillis()
+                        + ", NumActive: " + pool.getNumActive() + ", NumIdle: " + pool.getNumIdle() + ", NumWaiters: "
+                        + pool.getNumWaiters() );
+                // 如果模糊查询超过100个就停止
+                if ( maxNum > 0 && keys.size() >= maxNum )
+                {
+                    break;
+                }
+
+                cursor = redis.clients.jedis.ScanParams.SCAN_POINTER_START;
+
+                jedis = pool.getResource();
+                if ( jedis == null )
+                {
+                    continue;
+                }
+
+                // 只查询主节点
+                if ( !jedis.clusterNodes().contains( "myself,master" ) )
+                {
+                    jedis.close();
+                    continue;
+                }
+                logger.info( "---redisdebug---k: " + k + ", jedis master: " + jedis );
+                // redis单节点遍历key,直到条件终止
+                do
+                {
+                    // logger.info( "---redisdebug---k: " + k + ", jedis scan: "
+                    // + jedis + ", cursor: " + cursor );
+                    scanResult = jedis.scan( cursor, scanParams );
+                    cursor = scanResult.getStringCursor();
+                    results = scanResult.getResult();
+                    if ( !CollectionUtils.isEmpty( results ) )
+                    {
+                        keys.addAll( results );
+                    }
+                } while ( !redis.clients.jedis.ScanParams.SCAN_POINTER_START.equals( cursor )
+                        && (maxNum > 0 && keys.size() < maxNum) );
+
+                jedis.close();
+                logger.info( "---redisdebug---k: " + k + ", jedis closed: " + jedis );
+
+            }
+        } catch ( Exception e )
+        {
+            logger.error( e.getMessage(), e );
+            if ( jedis != null )
+            {
+                jedis.close();
+            }
+        }
+
+        // 只返回100个模糊查询结果
+        List<String> list = new ArrayList<String>( keys );
+        if ( maxNum > 0 )
+        {
+            int size = keys.size() >= maxNum ? maxNum : keys.size();
+            logger.info( "---redisdebug---:jedis scan end" );
+            return new HashSet<String>( list.subList( 0, size ) );
+        } else
+        {
+            return keys;
+        }
+
+    }
+
+    public long incr( String key )
+    {
+        long v = 0L;
+        try
+        {
+            v = jedisCluster.incr( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis incr error : ", e );
+        }
+
+        return v;
+    }
+
+    public long decr( String key )
+    {
+        long v = 0L;
+        try
+        {
+            v = jedisCluster.decr( key );
+        } catch ( Exception e )
+        {
+            logger.error( "redis incr error : ", e );
+        }
+
+        return v;
+    }
+
+    /**
+     * 为哈希表 key 中的域 field 的值加上增量 increment 。<br>
+     * 增量也可以为负数，相当于对给定域进行减法操作。<br>
+     * 如果 key 不存在，一个新的哈希表被创建并执行 HINCRBY 命令。<br>
+     * 如果域 field 不存在，那么在执行命令前，域的值被初始化为 0 。<br>
+     * 对一个储存字符串值的域 field 执行 HINCRBY 命令将造成一个错误。<br>
+     * 本操作的值被限制在 64 位(bit)有符号数字表示之内<br>
+     * 
+     * @param key
+     * @param field
+     * @param value
+     *            递增的值，如果传入负数则是相当于递减
+     * @return 执行 HINCRBY 命令之后，哈希表 key 中域 field 的值
+     */
+    public long hincrby( String key, String field, long value )
+    {
+        long v = 0L;
+        try
+        {
+            v = jedisCluster.hincrBy( key, field, value );
+        } catch ( Exception e )
+        {
+            logger.error( "redis hincrby error : ", e );
+        }
+
+        return v;
+    }
+
+    /**
+     * 为有序集 key 的成员 member 的 score 值加上增量 increment 。 <可以通过传递一个负数值 increment ，让
+     * score 减去相应的值，比如 ZINCRBY key -5 member ，就是让 member 的 score 值减去 5 。 当 key
+     * 不存在，或 member 不是 key 的成员时， ZINCRBY key increment member 等同于 ZADD key
+     * increment member 。 当 key 不是有序集类型时，返回一个错误。 score 值可以是整数值或双精度浮点数。>
+     * 
+     * @param key
+     * @param score
+     *            递增的值，如果传入负数则是相当于递减
+     * @param member
+     * @return member成员的新 score 值，以字符串形式表示。
+     */
+    public double zincrby( String key, double score, String member )
+    {
+        double v = 0D;
+        try
+        {
+            v = jedisCluster.zincrby( key, score, member );
+        } catch ( Exception e )
+        {
+            logger.error( "redis incr error : ", e );
+        }
+
+        return v;
+    }
+
+    public List<RedisInfoVO> info()
+    {
+        Map<String, JedisPool> map = jedisCluster.getClusterNodes();
+
+        String key;
+        Jedis jedis = null;
+        String info;
+        String oneLine;
+        String[] v;
+        List<RedisInfoVO> redisInfos = new ArrayList<RedisInfoVO>( map.size() );
+        RedisInfoVO redisInfoVO;
+        Map<String, String> infos = new LinkedHashMap<String, String>();
+        StringReader sReader = null;
+        BufferedReader reader = null;
+        try
+        {
+            for ( Entry<String, JedisPool> entry : map.entrySet() )
+            {
+                key = entry.getKey();
+                jedis = entry.getValue().getResource();
+                info = jedis.info();
+                sReader = new StringReader( info );
+                reader = new BufferedReader( sReader );
+
+                redisInfoVO = new RedisInfoVO();
+                redisInfoVO.setKey( key );
+                while ( null != (oneLine = reader.readLine()) )
+                {
+                    if ( oneLine.contains( RedisConstants.KEY_SPLITE ) )
+                    {
+                        v = oneLine.split( RedisConstants.KEY_SPLITE );
+                        infos.put( v[0], v[1] );
+                        ReflectUtil.setValue( redisInfoVO, v[0], new Class[] {String.class}, new String[] {v[1]} );
+                    }
+                }
+                redisInfoVO.setInfo( infos );
+                redisInfos.add( redisInfoVO );
+                jedis.close();
+            }
+        } catch ( FileNotFoundException e )
+        {
+            logger.error( "redis info FileNotFoundException: ", e );
+        } catch ( IOException e )
+        {
+            if ( jedis != null )
+            {
+                jedis.close();
+            }
+            logger.error( "redis info IOException: ", e );
+        } finally
+        {
+            if ( null != sReader )
+            {
+                sReader.close();
+            }
+
+            if ( null != reader )
+            {
+                try
+                {
+                    reader.close();
+                } catch ( IOException e )
+                {
+                    logger.error( "redis info reader close error: ", e );
+                }
+            }
+        }
+        return redisInfos;
+    }
+
+    public void flushDB()
+    {
+        Map<String, JedisPool> map = jedisCluster.getClusterNodes();
+        Jedis jedis = null;
+        try
+        {
+            for ( Entry<String, JedisPool> entry : map.entrySet() )
+            {
+                jedis = entry.getValue().getResource();
+                if ( jedis == null )
+                {
+                    continue;
+                }
+                // 只查询主节点
+                if ( !jedis.clusterNodes().contains( "myself,master" ) )
+                {
+                    jedis.close();
+                    continue;
+                }
+                jedis.flushDB();
+                jedis.close();
+            }
+        } catch ( Exception e )
+        {
+            if ( jedis != null )
+            {
+                jedis.close();
+            }
+            logger.error( "redis flushDB Exception: ", e );
+        }
+    }
+
+    public long getDbSize()
+    {
+        Map<String, JedisPool> map = jedisCluster.getClusterNodes();
+        Jedis jedis = null;
+        long dbSize = 0L;
+        try
+        {
+            for ( Entry<String, JedisPool> entry : map.entrySet() )
+            {
+                jedis = entry.getValue().getResource();
+                if ( jedis == null )
+                {
+                    continue;
+                }
+                // 只查询主节点
+                if ( !jedis.clusterNodes().contains( "myself,master" ) )
+                {
+                    jedis.close();
+                    continue;
+                }
+                dbSize += jedis.getDB();
+                jedis.close();
+            }
+        } catch ( Exception e )
+        {
+            if ( jedis != null )
+            {
+                jedis.close();
+            }
+            logger.error( "redis flushDB Exception: ", e );
+        }
+
+        return dbSize;
+    }
+
+    @Override
+    public boolean findIsCache()
+    {
+        String userId = "sysadmin";
+        String key = "ISCACHE";
+        String isCache = "0";
+        try
+        {
+            isCache = cacheDao.findIsCache( userId, key );
+        } catch ( ApplicationException ex )
+        {
+        }
+
+        return "1".equals( isCache );
+    }
+
+}
