@@ -1,7 +1,4 @@
-/*******************************************************************************
- * Copyright (c) Huawei Technologies Co., Ltd. 2010-2017. All rights reserved.
- * Author:sWX216762 2017年1月9日
- *******************************************************************************/
+
 
 package com.huawei.it.sctes.server.redis.client;
 
