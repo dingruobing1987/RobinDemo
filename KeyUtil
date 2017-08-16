@@ -1,0 +1,252 @@
+public class KeyUtil
+{
+    private static KeyUtil singleton = null;
+
+    public static KeyUtil getInstance()
+    {
+        if ( singleton == null )
+        {
+            singleton = new KeyUtil();
+        }
+        return singleton;
+    }
+
+    public static final String CLASS_NAME = "AlgoModelBaseData";
+
+    /**
+     * ProductVO信息
+     */
+    public static final String KEY_PRODUCT = "Product";
+    /**
+     * Product对应的ServiceProductProperty
+     */
+    public static final String KEY_SERVICE_PRODUCT_PROPERTY = "ServiceProductProperty";
+    /**
+     * 模块参数信息，包含参数对应的选项值
+     */
+    public static final String KEY_PARAMETER = "Parameter";
+    /**
+     * 模块下的part价格系数
+     */
+    public static final String KEY_PART_RATIO = "PartRatio";
+    /**
+     * 模块下的所有MaintenancePartPrice
+     */
+    public static final String KEY_MAINTENANCE_PART_PRICE = "MaintenancePartPrice";
+    /**
+     * 模块下的所有ServicePartPrice
+     */
+    public static final String KEY_SERVICE_PART_PRICE = "ServicePartPrice";
+    /**
+     * FormulaID与ModuleCode对应的算法文件路径
+     */
+    public static final String KEY_JSALGORITHM_PATHS = "JSAlgorithmPaths";
+    /**
+     * moduleID与ModuleCode组合已过滤后的SBOM数据
+     */
+    public static final String KEY_SBOM = "Sbom";
+    /**
+     * moduleID和ModeluCode未过滤的SBOM信息
+     */
+    public static final String KEY_ALGO_SBOM = "AlgoSbom";
+    /**
+     * moduleID模块Spart裁剪表的元数据
+     */
+    public static final String KEY_MODULE_FILTER_METADATAS = "ModuleFilterMetaDatas";
+    /**
+     * moduleID需过滤的Spart
+     */
+    public static final String KEY_SPART_FILTER_VALUES = "SpartFilterValues";
+    /**
+     * 产品详细数据包含(ProductVO+Parameters+sparts+jsUrls)
+     */
+    public static final String KEY_PRODUCT_WITH_ALGORITHM = "ProductWithAlgorithm";
+    /**
+     * moduleID加partNumber构成的培训产品部件信息
+     */
+    public static final String KEY_TRAINING_PART = "TrainingPart";
+
+    public static final int CACHE_TIME = 60 * 60 * 24;
+
+    /**
+     * 生成key值。<BR>
+     * key 生成规则：{系统名}.{环境名称}.{包名}.{类名}.{方法名}:{自定义前缀(可选项)}:{arg1}.{arg2}.{...}
+     * 
+     * @param invocation
+     * @param useRedis
+     * @return
+     */
+    public String buildRedisKey( MethodInvocation invocation, UseRedis useRedis )
+    {
+
+        StringBuilder buf = new StringBuilder( buildAppEnv() );
+
+        // 类名称，类的完整路径名称，包含了包名称
+        String className = invocation.getThis().getClass().getName();
+        // String classSimpleName =
+        // invocation.getThis().getClass().getSimpleName();
+
+        // 方法名称
+        String methodName = invocation.getMethod().getName();
+
+        // 返回值类型
+        // String returnType =
+        // invocation.getMethod().getReturnType().getSimpleName();
+
+        buf.append( RedisConstants.KEY_POINT ).append( className ).append( RedisConstants.KEY_POINT );
+
+        buf.append( methodName );
+
+        // buf.append( returnType );
+
+        if ( useRedis.key().length() > 0 )
+        {
+            buf.append( RedisConstants.KEY_SPLITE ).append( useRedis.key() );
+        }
+
+        Object[] args = invocation.getArguments();
+        StringBuilder argValue = new StringBuilder();
+        if ( useRedis.keyMode() == KeyMode.DEFAULT )
+        {
+            Annotation[][] pas = invocation.getMethod().getParameterAnnotations();
+            for ( int i = 0; i < pas.length; i++ )
+            {
+                if ( null == args[i] )
+                {
+                    continue;
+                }
+                // CHECKSTYLE:OFF
+                for ( Annotation an : pas[i] )
+                // CHECKSTYLE:ON
+                {
+                    if ( an instanceof RedisKey )
+                    {
+                        argValue.append( args[i].toString() ); // VO对象必须重新toString方法，
+                        break;
+                    }
+                }
+            }
+        } else if ( useRedis.keyMode() == KeyMode.BASIC )
+        {
+            // CHECKSTYLE:OFF
+            for ( Object arg : args )
+            // CHECKSTYLE:ON
+            {
+                if ( null == arg )
+                {
+                    continue;
+                }
+                if ( arg instanceof String )
+                {
+                    argValue.append( arg );
+                } else if ( arg instanceof Integer || arg instanceof Long || arg instanceof Short
+                        || arg instanceof Float || arg instanceof Double )
+                {
+                    argValue.append( arg.toString() );
+                } else if ( arg instanceof Boolean )
+                {
+                    argValue.append( arg.toString() );
+                }
+            }
+        } else if ( useRedis.keyMode() == KeyMode.ALL )
+        {
+            // CHECKSTYLE:OFF
+            for ( Object arg : args )
+            // CHECKSTYLE:ON
+            {
+                if ( null == arg )
+                {
+                    continue;
+                }
+                argValue.append( arg.toString() );
+            }
+        }
+
+        if ( !StringUtil.isNullOrEmpty( argValue.toString() ) )
+        {
+            buf.append( RedisConstants.KEY_SPLITE ).append( argValue.toString() );
+        }
+
+        // 考虑key是否需要用MD5加密,统一编码key的长度节省内存开销,编码后对key值不好维护...
+        // return MD5Util.getMD5Data( buf.toString().getBytes() );
+        return buf.toString();
+    }
+
+    public String buildAppEnv()
+    {
+        StringBuffer appEnv = new StringBuffer();
+        // 系统标识，基于jalor5取的是系统的AppName
+        String appName = Application.getCurrent().getAppName();
+
+        // 环境信息，用于多套环境使用同一个缓存系统时，key的区分
+        String envInfo = GlobalParameters.get( "Env" );
+        if ( StringUtil.isNullOrEmpty( envInfo ) )
+        {
+            envInfo = Application.getCurrent().getEnviorment();
+        }
+
+        appEnv.append( appName );
+
+        if ( !StringUtil.isNullOrEmpty( envInfo ) )
+        {
+            appEnv.append( RedisConstants.KEY_POINT );
+            appEnv.append( envInfo );
+        }
+
+        return appEnv.toString();
+    }
+
+    /**
+     * className+method+key 生成redis的key
+     * 
+     * @param className
+     * @param method
+     * @param key
+     * @return
+     */
+    public String buildKey( String className, String method, Object key )
+    {
+        StringBuffer keys = new StringBuffer();
+
+        keys.append( buildAppEnv() );
+        keys.append( RedisConstants.KEY_POINT );
+        keys.append( className );
+        keys.append( RedisConstants.KEY_POINT );
+        keys.append( method );
+        keys.append( RedisConstants.KEY_POINT );
+
+        if ( null != key )
+        {
+            keys.append( key.toString() );
+        }
+
+        return keys.toString();
+    }
+
+    /**
+     * method+ key 生成redis的key
+     * 
+     * @param method
+     * @param key
+     * @return
+     */
+    public String buildKey( String method, Object key )
+    {
+        StringBuffer keys = new StringBuffer();
+
+        keys.append( buildAppEnv() );
+        keys.append( RedisConstants.KEY_POINT );
+        keys.append( CLASS_NAME );
+        keys.append( RedisConstants.KEY_POINT );
+        keys.append( method );
+        keys.append( RedisConstants.KEY_POINT );
+
+        if ( null != key )
+        {
+            keys.append( key.toString() );
+        }
+
+        return keys.toString();
+    }
+
+}
