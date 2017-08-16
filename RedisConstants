@@ -1,0 +1,8 @@
+public interface RedisConstants
+{
+    boolean ZSTD_ENABLE = true;
+    
+    String KEY_SPLITE = ":".intern();
+    
+    String KEY_POINT = ".".intern();
+}
