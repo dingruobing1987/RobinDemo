@@ -1,0 +1,221 @@
+public class RedisInterceptor implements MethodInterceptor
+{
+
+    @Inject
+    private IRedisClient redisClient;
+
+    @SuppressWarnings( "rawtypes" )
+    @Override
+    public Object invoke( MethodInvocation invocation ) throws Throwable
+    {
+        // 判断是否开启了缓存
+        if ( !redisClient.findIsCache() )
+        {
+            return invocation.proceed();
+        }
+
+        // 获取方法上的UseRedis注解
+        UseRedis useRedis = getJalorUseRedis( invocation );
+        if ( useRedis == null )
+        {
+            return invocation.proceed();
+        }
+
+        String key = KeyUtil.getInstance().buildRedisKey( invocation, useRedis );
+
+        Class returnClassType = invocation.getMethod().getReturnType();
+
+        return cacheHandler( useRedis.dataType(), invocation, key, useRedis.expire(), returnClassType );
+
+    }
+
+    /**
+     * 获取方法上UseRedis注解
+     * 
+     * @param invocation
+     * @return
+     */
+    private UseRedis getJalorUseRedis( MethodInvocation invocation )
+    {
+        Method method = invocation.getMethod();
+        method = ClassUtils.getMostSpecificMethod( method, invocation.getThis().getClass() );
+        UseRedis useRedis = method.getAnnotation( UseRedis.class );
+        // Note: annotation可能为null，因为接口的方法调用也会被拦截到，如：IGroupService#createGroup
+        return useRedis;
+    }
+
+    /**
+     * 缓存处理
+     * 
+     * @param datatype
+     * @param invocation
+     * @param key
+     * @param seconds
+     * @param clas
+     * @return
+     * @throws Throwable
+     */
+    @SuppressWarnings( {"rawtypes", "unchecked"} )
+    private Object cacheHandler( DataType datatype, MethodInvocation invocation, String key, int seconds, Class clas )
+            throws Throwable
+    {
+        switch ( datatype )
+        {
+            case OBJECT:
+                return objectHandler( invocation, key, seconds, clas );
+            case STRING:
+                return stringHandler( invocation, key, seconds );
+            case LIST:
+                return listHandler( invocation, key, seconds );
+            case HASH:
+                return hashHandler( invocation, key, seconds );
+            case SET:
+                return setHandler( invocation, key, seconds );
+            case HASHOBJECT:
+                return hashObjectHandler( invocation, key, clas, seconds );
+            default:
+                return null;
+        }
+    }
+
+    private Object objectHandler( MethodInvocation invocation, String key, int seconds, Class<Object> clas )
+            throws Throwable
+    {
+        Object value = redisClient.getObject( key, clas );
+        if ( null != value )
+        {
+            expire( key, seconds ); // 当有访问并命中时，对key进行续命，延长过期时间
+            return value;
+        }
+
+        value = invocation.proceed();
+
+        redisClient.setObject( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    private Object stringHandler( MethodInvocation invocation, String key, int seconds ) throws Throwable
+    {
+        String value = redisClient.getString( key );
+        if ( !StringUtil.isNullOrEmpty( value ) )
+        {
+            expire( key, seconds );
+            return value;
+        }
+
+        value = (String)invocation.proceed();
+
+        if ( null == value )
+        {
+            return null;
+        }
+
+        redisClient.setString( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    @SuppressWarnings( "unchecked" )
+    private Object listHandler( MethodInvocation invocation, String key, int seconds ) throws Throwable
+    {
+        List<String> value = redisClient.getList( key );
+        if ( CollectionUtils.isNotEmpty( value ) )
+        {
+            expire( key, seconds );
+            return value;
+        }
+
+        value = (List<String>)invocation.proceed();
+
+        if ( null == value )
+        {
+            return null;
+        }
+
+        redisClient.setList( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    @SuppressWarnings( "unchecked" )
+    private Object hashHandler( MethodInvocation invocation, String key, int seconds ) throws Throwable
+    {
+        Map<String, String> value = redisClient.getMap( key );
+        if ( null != value && !value.isEmpty() )
+        {
+            expire( key, seconds );
+            return value;
+        }
+
+        value = (Map<String, String>)invocation.proceed();
+
+        if ( null == value )
+        {
+            return null;
+        }
+
+        redisClient.setMap( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    @SuppressWarnings( {"unchecked", "rawtypes"} )
+    private Map<String, Object> hashObjectHandler( MethodInvocation invocation, String key, Class clas, int seconds )
+            throws Throwable
+    {
+        Map<String, Object> value = redisClient.getMapObject( key, clas );
+        if ( null != value && !value.isEmpty() )
+        {
+            expire( key, seconds );
+            return value;
+        }
+
+        value = (Map<String, Object>)invocation.proceed();
+
+        if ( null == value )
+        {
+            return null;
+        }
+
+        redisClient.setMapObject( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    @SuppressWarnings( "unchecked" )
+    private Set<String> setHandler( MethodInvocation invocation, String key, int seconds ) throws Throwable
+    {
+        Set<String> value = redisClient.getMembers( key );
+        if ( null != value && !value.isEmpty() )
+        {
+            expire( key, seconds );
+            return value;
+        }
+
+        value = (Set<String>)invocation.proceed();
+
+        if ( null == value )
+        {
+            return null;
+        }
+
+        redisClient.setHashSet( key, value );
+        expire( key, seconds );
+
+        return value;
+    }
+
+    private void expire( String key, int seconds )
+    {
+        if ( 0 < seconds )
+        {
+            redisClient.expire( key, seconds );
+        }
+    }
+}
